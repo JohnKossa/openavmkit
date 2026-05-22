@@ -94,14 +94,19 @@ def perform_calculations(df_in: pd.DataFrame, calc: dict, rename_map: dict = Non
     df = df_in.copy()
 
     for new_field in calc:
-        entry = calc[new_field]
-        new_value = _do_calc(df, entry, rename_map=rename_map)
-        df[new_field] = new_value
+        try:
+            entry = calc[new_field]
+            new_value = _do_calc(df, entry, rename_map=rename_map)
+            df[new_field] = new_value
 
-        # Keep only essential debug output for valid_sale
-        if new_field == "valid_sale":
-            valid_count = df[new_field].sum()
-            print(f"Valid sales: {valid_count} out of {len(df)} total")
+            # Keep only essential debug output for valid_sale
+            if new_field == "valid_sale":
+                valid_count = df[new_field].sum()
+                print(f"Valid sales: {valid_count} out of {len(df)} total")
+        except:
+            print(f"Exception occurred for field: {new_field}")
+            raise
+
 
     # remove temporary columns
     for col in df.columns:
@@ -333,6 +338,12 @@ def _do_calc(df_in: pd.DataFrame, entry: list, i: int = 0, rename_map: dict = No
         return np.minimum(lhs, rhs)
     elif op == "max":
         return np.maximum(lhs, rhs)
+    elif op == "range":
+        # Returns max - min of a series if applied in a context that supports it
+        # or performs the operation on two fields if provided.
+        if rhs is not None:
+            return lhs - rhs
+        return lhs.max() - lhs.min()
     elif op == "//":
         return (lhs // rhs).astype(int)
     elif op == "/0":

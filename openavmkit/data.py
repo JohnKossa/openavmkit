@@ -1050,6 +1050,74 @@ def get_train_test_masks(df_in: pd.DataFrame, settings: dict):
 #######################################
 
 
+def enrich_sup_neighborhood_summary(
+    sup: SalesUniversePair, settings: dict, verbose: bool = False
+) -> SalesUniversePair:
+    """
+    Enrich SalesUniversePair with neighborhood-level aggregated features.
+
+    Parameters
+    ----------
+    sup : SalesUniversePair
+        Sales and universe data.
+    settings : dict
+        Configuration settings.
+    verbose : bool, optional
+        If True, enables verbose output.
+
+    Returns
+    -------
+    SalesUniversePair
+        Updated SalesUniversePair with neighborhood summary features.
+    """
+    s_nbhd = (
+        settings.get("data", {})
+        .get("process", {})
+        .get("enrich", {})
+        .get("neighborhood_summary", {})
+    )
+    if not s_nbhd:
+        if verbose:
+            print("No neighborhood_summary configuration found.")
+        return sup
+
+    sup.universe = _enrich_neighborhood_summary(sup.universe, s_nbhd, "universe", verbose)
+    sup.sales = _enrich_neighborhood_summary(sup.sales, s_nbhd, "sales", verbose)
+
+    return sup
+
+
+def _enrich_neighborhood_summary(df, s_summary, label, verbose=False):
+    """Core logic for per-dataframe neighborhood summary enrichment."""
+    nbhd_field = s_summary.get("neighborhood_field")
+    features = s_summary.get("features", {})
+
+    if nbhd_field not in df.columns:
+        if verbose:
+            print(f"Skipping neighborhood summary for {label}: {nbhd_field} not found.")
+        return df
+
+    for new_col, instr in features.items():
+        field = instr.get("field")
+        op = instr.get("op")
+
+        if field not in df.columns:
+            print(
+                f"Warning: Field '{field}' not found in {label} dataframe. Skipping '{new_col}'."
+            )
+            continue
+
+        if op == "range":
+            # Implementation of the requested max - min operation across the group. Not natively supported, so we have a custom lambda
+            df[new_col] = df.groupby(nbhd_field)[field].transform(
+                lambda x: x.max() - x.min()
+            )
+        else:
+            df[new_col] = df.groupby(nbhd_field)[field].transform(op)
+
+    return df
+
+
 def _enrich_data(
     sup: SalesUniversePair,
     s_enrich: dict,
@@ -1202,10 +1270,15 @@ def _enrich_df_census(
     if verbose:
         print("Getting Census Data...")
     
-    # Get Census data with boundaries
-    census_data, census_boundaries = census_service.get_census_data_with_boundaries(
-        fips_code=fips_code, year=year, census_settings=census_settings
-    )
+    # try:
+    try:
+        # Get Census data with boundaries
+        census_data, census_boundaries = census_service.get_census_data_with_boundaries(
+            fips_code=fips_code, year=year, census_settings=census_settings
+        )
+    except Exception as e:
+        warnings.warn(f"Failed to get Census data: {str(e)}. Skipping Census enrichment.")
+        return df_in
 
     # Spatial join with universe data only
     if not isinstance(df, gpd.GeoDataFrame):
@@ -3924,6 +3997,9 @@ def _handle_duplicated_rows(
                 else:
                     df_sorted = df_in.copy()
                 
+                if op == "range":
+                    op = lambda x: x.max() - x.min()
+
                 df_result = (
                     df_sorted.groupby(subset)
                     .agg({field: op})
@@ -4453,7 +4529,7 @@ def _perform_canonical_split(
                 if len(df_i_look_back) > n_i:
                     n_i += 1
                     diff_i -= 1
-                if diff_i == old_dif:
+                if diff_i == old_diff:
                     break
             
             if n_v > 0 and len(df_v_look_back) > 0:

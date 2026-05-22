@@ -933,6 +933,29 @@ def enrich_sup_streets(sup: SalesUniversePair, settings: dict, verbose: bool = F
     return sup
 
 
+def enrich_sup_neighborhood_summary(
+    sup: SalesUniversePair, settings: dict, verbose: bool = False
+) -> SalesUniversePair:
+    """
+    Enrich SalesUniversePair with neighborhood-level aggregated features.
+
+    Parameters
+    ----------
+    sup : SalesUniversePair
+        Sales and universe data.
+    settings : dict
+        Configuration settings.
+    verbose : bool, optional
+        If True, enables verbose output.
+
+    Returns
+    -------
+    SalesUniversePair
+        Updated SalesUniversePair with neighborhood summary features.
+    """
+    return openavmkit.data.enrich_sup_neighborhood_summary(sup, settings, verbose)
+
+
 def fill_unknown_values_sup(
     sup: SalesUniversePair, settings: dict
 ) -> SalesUniversePair:
